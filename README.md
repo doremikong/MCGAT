@@ -50,7 +50,7 @@ If you want to select metapaths with incremental metapath optimization, run `inc
 
 지난40년간 FDA에 승인된 약물 중 약 3분의 1이 천연물을 기반으로 만들어졌을 정도로, 천연물은 약물 소재로서 높은 잠재력을 가집니다. 그래서 어떤 **천연물이 어떤 질병에 효과가 있을지를 예측**하는 것 또한 매우 중요하지만 어려운 문제입니다.
 
-저는 **메타패스(Metapath) 기반의 그래프 신경망(GNN)을 활용하여 천연물과 질병(표현형) 간의 연관성을 예측하는 모델**을 개발했습니다. 특히, 기존 모델들이 다양한 생물학적 정보의 상호작용을 충분히 반영하지 못하는 문제를 해결하기 위해, **교차 유형 동기화(Cross-type Synchronization) 기법과 점진적 메타패스 최적화(Incremental Metapath Optimization) 기법을 개발**했습니다. 이를 통해 **AUROC 0.7586, AUPRC 0.7240**의 더 정교한 예측에 성공했고**, 파킨슨병과 연관된 새로운 천연물을 발굴하는 성과**도 거두었습니다.
+저는 **메타패스(Metapath) 기반의 그래프 신경망(GNN)을 활용하여 천연물과 질병(표현형) 간의 연관성을 예측하는 모델**을 개발했습니다. 특히, 기존 모델들이 다양한 생물학적 정보의 상호작용을 충분히 반영하지 못하는 문제를 해결하기 위해, **교차 유형 동기화(Cross-type Synchronization) 기법과 점진적 메타패스 최적화(Incremental Metapath Optimization) 기법을 개발**했습니다. 이를 통해 **AUROC 0.7586, AUPRC 0.7240**의 더 정교한 예측에 성공했고, 파킨슨병과 연관된 새로운 천연물을 발굴하는 성과도 거두었습니다.
 
 ---
 
@@ -92,7 +92,7 @@ If you want to select metapaths with incremental metapath optimization, run `inc
 ✅ **해결 방법**
 
 - 초기 기본 메타패스(Base Metapath) 설정 후 **새로운 메타패스를 하나씩 추가하며 성능 비교 → 의미 있는 성능 향상을 제공하는 메타패스만 유지**
-- **대응 표본 T 검증(Paired t-test)**을 통해 **불필요한 메타패스 제외**
+- 대응 표본 T 검증(Paired t-test)을 통해 **불필요한 메타패스 제외**
 
 ✅ **성과**
 
