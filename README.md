@@ -1,4 +1,4 @@
-# MSGAT: Metapath-based Syncrhonized Graph Attention Network
+# MCGAT: Metapath-based Cross-type Syncrhonized Graph Attention Network
 
 ## **📑 Summary**
 
