@@ -1,8 +1,8 @@
 # MCGAT: Metapath-based Cross-type Syncrhonized Graph Attention Network
 
 # MCGAT
-We developed a Metapath-based Cross-type Synchronized Graph Attention Network, MCGAT for herb-disease association prediction.
-We applied novel 'Cross-type synchronization' and 'Incremental metapath optimization' in MCGAT.
+We developed a Metapath-based Cross-type Synchronized Graph Attention Network(MCGAT) for herb-disease association prediction.
+We applied the novel 'Cross-type synchronization' and 'Incremental metapath optimization' in MCGAT.
 
 ## Requirements
 Python version
@@ -44,17 +44,6 @@ If you want to select metapaths with incremental metapath optimization, run `inc
 
 ---
 
-## 💊 약물-질병 연관성 예측
-
-## **📑 Summary**
-
-**"인공지능으로 신약 개발"**
-
-어떤 **약물이 어떤 질병에 효과가 있을지를 예측**하는 것은 매우 중요하지만 어려운 문제입니다.
-
-저는 기존 모델들이 다양한 상호작용을 충분히 반영하지 못하는 문제를 해결하기 위해, **메타패스(Metapath) 기반의 GNN을 활용하여 약물과 질병 간의 연관성을 예측하는 새로운 모델**을 개발했습니다. 이를 통해 **AUROC 0.7586, AUPRC 0.7240**의 더 정교한 예측에 성공했고**, 파킨슨병과 연관된 새로운 천연물을 발굴하는 성과**도 거두었습니다.
-
----
 
 ## **💪 Contribution**
 
