@@ -1,11 +1,11 @@
-from model_MCGAT import MCGAT, LinkPredictor, EarlyStopping
+from model_MSGAT import MSGAT, EarlyStopping
 import torch
 import torch.nn as nn
 import dgl
 import pandas as pd
 import re
 import numpy as np
-from sklearn.metrics import roc_auc_score, f1_score, precision_recall_curve, auc, matthews_corrcoef, precision_score, recall_score
+from sklearn.metrics import roc_auc_score, precision_recall_curve, auc
 import random
 import os
 
@@ -34,7 +34,6 @@ def to_idx_tensor(df, source_idx, target_idx, rev=False):
         return target_tensor, source_tensor
     return source_tensor, target_tensor
 
-
 def score(pos_score, neg_score):
     pos_score = pos_score.cpu()
     neg_score = neg_score.cpu()
@@ -46,39 +45,29 @@ def score(pos_score, neg_score):
 def get_best_threshold(pos_score,neg_score):
     pos_score = pos_score.cpu()
     neg_score = neg_score.cpu()
-    y_prob = torch.cat([pos_score, neg_score]).detach().numpy()
-    y_true = torch.cat([torch.ones(pos_score.shape[0]), torch.zeros(neg_score.shape[0])]).detach().numpy()
     thresholds = np.linspace(0, 1, 101)
 
-    best_threshold_mcc = 0.0
-    best_mcc = -1.0
+    best_threshold_acc = 0.0
+    best_acc = -1.0
 
     for threshold in thresholds:
-        y_pred = (y_prob >= threshold).astype(int)
+        acc = (torch.sum(neg_score < threshold).item() + torch.sum(pos_score > threshold).item())/(len(pos_score)+len(neg_score))
+
+        if acc > best_acc:
+            best_acc = acc
+            best_threshold_acc = threshold
         
-        mcc = matthews_corrcoef(y_true, y_pred)
-
-        if mcc > best_mcc:
-            best_mcc = mcc
-            best_threshold_mcc = threshold
-
-    return best_threshold_mcc
+    return best_threshold_acc, best_acc
 
 
-def test_score(pos_score, neg_score, val_pos_score, val_neg_score):
+def test_score(pos_score, neg_score):
     pos_score = pos_score.cpu()
     neg_score = neg_score.cpu()
     scores = torch.cat([pos_score, neg_score]).detach().numpy()
     labels = torch.cat([torch.ones(pos_score.shape[0]), torch.zeros(neg_score.shape[0])]).detach().numpy()
     precisions, recalls, _ = precision_recall_curve(labels,scores)
     auprc = auc(recalls, precisions)
-    threshold = get_best_threshold(val_pos_score,val_neg_score)
-    y_pred = (scores >= threshold).astype(int)
-    f1 = f1_score(labels, y_pred)
-    precision = precision_score(labels, y_pred, zero_division=0)
-    recall = recall_score(labels, y_pred)
-    mcc = matthews_corrcoef(labels, y_pred)
-    return roc_auc_score(labels, scores), auprc, f1, precision, recall, mcc
+    return roc_auc_score(labels, scores), auprc
 
 def criterion(pos_score, neg_score):
     scores = torch.cat([pos_score, neg_score]).to(device)
@@ -101,7 +90,7 @@ def masking(g):
     masked = random.sample(range(ne), int(ne*0.1))
     masked_g = dgl.remove_edges(g,masked,etype)
     masked_g = dgl.remove_edges(masked_g,masked,rev_etype)
-    return masked_g  
+    return masked_g
 
 
 def weighted_neg_sampler(num_negs, k, src_weights, dst_weights):
@@ -197,29 +186,28 @@ metapath_dict = {
 
 # metapath_dict = {
 #     'herb': [("ch"),("ph"),("pp","ph")],
-#     'compound': [("cc")],
-#     'phenotype': [("pp"),("cp")],
+#     'compound': [("cc"),("hc")],
+#     'phenotype': [("pp"),("hp"),("pc","cp")],
 #     }
 
-hidden_size = 128
-num_heads = [8]
+hidden_size = 64
+num_heads = [16]
 feature_dim = 1024
-model = MCGAT(
+model = MSGAT(
     meta_paths= metapath_dict,
-    ntypes = g.ntypes,
+    ntypes = ['compound','herb','phenotype'],
     in_size=feature_dim,
     hidden_size=hidden_size,
     num_heads=num_heads,
-    dropout=0.6,
-    update_cnt=3
+    dropout=0.1,
+    update_cnt=1,
+    sem_hidden = 1024
 ).to(device)
 
 g = g.to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 es = EarlyStopping(patience=300, mode='max', verbose=False)
 
-pred = LinkPredictor(in_channels = num_heads[0] * hidden_size * 2)
-pred = pred.to(device)
 
 etype = 'hp'
 rev_etype = 'ph'
@@ -289,8 +277,7 @@ for epoch in range(5000):
     masked_train_g = masking(train_g)
     train_src_weights, train_dst_weights = get_weights(masked_train_g)
     train_neg_edges = weighted_neg_sampler(train_num_pos,1,train_src_weights,train_dst_weights)
-    h = model(masked_train_g, train_features)
-    pos_score, neg_score = pred(h[stype][train_pos_edges[0]], h[dtype][train_pos_edges[1]]), pred(h[stype][train_neg_edges[0]], h[dtype][train_neg_edges[1]])
+    pos_score, neg_score = model(masked_train_g, train_features, stype,dtype,train_pos_edges,train_neg_edges)
 
     pos_score = pos_score.to(device)
     neg_score = neg_score.to(device)
@@ -300,21 +287,19 @@ for epoch in range(5000):
     optimizer.zero_grad()
     loss.backward()
     optimizer.step()
-    losses.append(loss.cpu().detach().numpy())
-    
 
     model.eval()
     with torch.no_grad():
         val_neg_edges = weighted_neg_sampler(val_num_pos,1,val_src_weights,val_dst_weights)
-        val_h = model(val_g, val_features)
-        pos_score, neg_score = pred(val_h[stype][val_pos_edges[0]], val_h[dtype][val_pos_edges[1]]), pred(val_h[stype][val_neg_edges[0]], val_h[dtype][val_neg_edges[1]])
+        pos_score, neg_score = model(val_g, val_features, stype, dtype, val_pos_edges, val_neg_edges)       
+    
     val_loss = criterion(pos_score, neg_score)
     val_auc, val_acc = score(pos_score, neg_score)
 
     if val_auc > best_val_auc:
         best_epoch = epoch
         best_val_auc = val_auc
-        torch.save(model.state_dict(), "best_model.pth")
+        torch.save(model.state_dict(), f"best_model.pth")
 
 
     # print(
@@ -333,7 +318,8 @@ for epoch in range(5000):
         break
 
 print(
-    "Best Epoch {:d} | Best valauc {:.4f} ".format(
+    "End Epoch {:d} | Best Epoch {:d} | Best valauc {:.4f} ".format(
+        epoch + 1,
         best_epoch + 1,
         best_val_auc,
     )
@@ -351,24 +337,17 @@ model.eval()
 
 with torch.no_grad():
     val_neg_edges = weighted_neg_sampler(val_num_pos,1,val_src_weights,val_dst_weights)
-    val_h = model(val_g, val_features)
-    val_pos_score, val_neg_score = pred(val_h[stype][val_pos_edges[0]], val_h[dtype][val_pos_edges[1]]), pred(val_h[stype][val_neg_edges[0]], val_h[dtype][val_neg_edges[1]])
+    val_pos_score, val_neg_score = model(val_g, val_features, stype, dtype, val_pos_edges, val_neg_edges)
     test_neg_edges = weighted_neg_sampler(test_num_pos,1,test_src_weights,test_dst_weights)
-    test_h = model(test_g, test_features)
-    pos_score, neg_score = pred(test_h[stype][test_pos_edges[0]], test_h[dtype][test_pos_edges[1]]), pred(test_h[stype][test_neg_edges[0]], test_h[dtype][test_neg_edges[1]])
+    test_pos_score, test_neg_score = model(test_g, test_features, stype, dtype, test_pos_edges, test_neg_edges)
 
-
-test_loss = criterion(pos_score, neg_score)
-test_auc, auprc, f1, precision, recall, mcc = test_score(pos_score, neg_score, val_pos_score, val_neg_score)
+test_loss = criterion(test_pos_score, test_neg_score)
+test_auc, test_auprc = test_score(test_pos_score, test_neg_score)
 
 print(
-    "Test Loss {:.4f} | AUC {:.4f} | AUPRC {:.4f} | F1 {:.4f} | Precision {:.4f} | Recall {:.4f} | MCC {:.4f}".format(
+    "Test Loss {:.4f} | AUC {:.4f}".format(
         test_loss.item(),
         test_auc,
-        auprc,
-        f1,
-        precision,
-        recall,
-        mcc
+        test_auprc,
     )
 )

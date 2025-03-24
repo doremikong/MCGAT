@@ -1,4 +1,4 @@
-from model_MCGAT import MCGAT, LinkPredictor
+from model_MSGAT import MSGAT
 import torch
 import torch.nn as nn
 import dgl
@@ -36,10 +36,9 @@ def to_idx_tensor(df, source_idx, target_idx, rev=False):
 def score(pos_score, neg_score):
     pos_score = pos_score.cpu()
     neg_score = neg_score.cpu()
-    acc = (torch.sum(neg_score < 0.5).item() + torch.sum(pos_score > 0.5).item())/(len(pos_score)+len(neg_score))
     scores = torch.cat([pos_score, neg_score]).detach().numpy()
     labels = torch.cat([torch.ones(pos_score.shape[0]), torch.zeros(neg_score.shape[0])]).detach().numpy()
-    return roc_auc_score(labels, scores), acc
+    return roc_auc_score(labels, scores)
 
 
 def criterion(pos_score, neg_score):
@@ -140,12 +139,10 @@ device = torch.device('cuda')
 #device = torch.device('cpu')
 device
 
-hidden_size = 128
-num_heads = [8]
+hidden_size = 64
+num_heads = [16]
 feature_dim = 1024
 
-pred = LinkPredictor(in_channels = num_heads[0] * hidden_size * 2)
-pred = pred.to(device)
 
 
 ##### Generate metapaths list #####
@@ -296,15 +293,17 @@ for i in range(5):
             ntype = 'herb'
             metapath_dict[ntype] = metapath_dict[ntype] + [path]
         
-        model = MCGAT(
+        model = MSGAT(
             meta_paths= metapath_dict,
             ntypes = ['compound','herb','phenotype'],
             in_size=feature_dim,
             hidden_size=hidden_size,
-            num_heads=[8],
-            dropout=0.6,
+            num_heads=num_heads,
+            dropout=0.1,
             update_cnt=1,
+            sem_hidden = 1024
         ).to(device)
+
         g = g.to(device)
         optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
@@ -315,13 +314,12 @@ for i in range(5):
 
         for epoch in range(100):
             model.train()
-            h = model(train_g, train_features)
-            pos_score, neg_score = pred(h[stype][train_pos_edges[0]], h[dtype][train_pos_edges[1]]), pred(h[stype][train_neg_edges[0]], h[dtype][train_neg_edges[1]])
+            pos_score, neg_score = model(train_g, train_features, stype,dtype,train_pos_edges,train_neg_edges)
 
             pos_score = pos_score.to(device)
             neg_score = neg_score.to(device)
             loss = criterion(pos_score, neg_score)
-            train_auc, train_acc = score(pos_score, neg_score)
+            train_auc = score(pos_score, neg_score)
 
             optimizer.zero_grad()
             loss.backward()
@@ -329,10 +327,9 @@ for i in range(5):
 
             model.eval()
             with torch.no_grad():
-                val_h = model(val_g, val_features)
-                pos_score, neg_score = pred(val_h[stype][val_pos_edges[0]], val_h[dtype][val_pos_edges[1]]), pred(val_h[stype][val_neg_edges[0]], val_h[dtype][val_neg_edges[1]])
-            val_loss = criterion(pos_score, neg_score)
-            val_auc, val_acc = score(pos_score, neg_score)
+                val_pos_score, val_neg_score = model(val_g, val_features, stype, dtype, val_pos_edges, val_neg_edges)                  
+                val_loss = criterion(val_pos_score, val_neg_score)
+            val_auc = score(val_pos_score, val_neg_score)
 
             if val_auc > best_val_auc:
                 best_epoch = epoch
@@ -353,18 +350,15 @@ for i in range(5):
         model.eval()
 
         with torch.no_grad():
-            test_h = model(test_g, test_features)
-            pos_score, neg_score = pred(test_h[stype][test_pos_edges[0]], test_h[dtype][test_pos_edges[1]]), pred(test_h[stype][test_neg_edges[0]], test_h[dtype][test_neg_edges[1]])
+            test_pos_score, test_neg_score = model(test_g, test_features, stype, dtype, test_pos_edges, test_neg_edges)
 
-
-        test_loss = criterion(pos_score, neg_score)
-        test_auc, test_acc = score(pos_score, neg_score)
+        test_loss = criterion(test_pos_score, test_neg_score)
+        test_auc = score(test_pos_score, test_neg_score)
 
         print(
-            "Test Loss {:.4f} | Test AUC {:} | Test Acc {:.4f} ".format(
+            "Test Loss {:.4f} | Test AUC {:}".format(
                 test_loss.item(),
                 test_auc,
-                test_acc,
             )
         )
         results.append([path,i+1,test_auc])
