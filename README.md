@@ -1,8 +1,8 @@
-# MCGAT: Metapath-based Cross-type Syncrhonized Graph Attention Network
+# MSGAT: Metapath-based Syncrhonized Graph Attention Network
 
 # MCGAT
-We developed a Metapath-based Cross-type Synchronized Graph Attention Network(MCGAT) for herb-disease association prediction.
-We applied the novel 'Cross-type synchronization' and 'Incremental metapath optimization' in MCGAT.
+We developed a Metapath-based Synchronized Graph Attention Network(MSGAT) for herb-disease association prediction.
+We applied a novel 'Cross-type synchronization' mechanism and 'Incremental metapath optimization' in MSGAT.
 
 ## Requirements
 Python version
